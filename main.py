@@ -57,7 +57,8 @@ class MainAlgorithm:
         apply_selected_path()
         return
 
-    def get_time_vectors_of_arc(self):
+    def get_time_vectors_of_arc(self, mission: Mission, t_m):
+
         return
 
     def shortest_path_with_time_windows(self):
@@ -88,12 +89,18 @@ class MainAlgorithm:
         j = 1
 
         arc_p = dict()
-        # ?
+        arc_p[o_m] = -1
+        #
         if t_m <= in_t_o_m[0]:
             arc_p[o_m] = 0
         for i in range(0, len(in_t_o_m) - 1):
-            if t
-        # ?
+            if out_t_o_m[i] <= t_m <= in_t_o_m[i + 1]:
+                arc_p[o_m] = i
+        if t_m >= out_t_o_m[-1]:
+            arc_p[o_m] = len(in_t_o_m)
+        if arc_p[o_m] == -1:
+            return False, None
+        #
         for arc in path.arcs[1:]:
             arc_p[arc] = -1
 
@@ -118,7 +125,7 @@ class MainAlgorithm:
             if arc_p[arc] < 0 and in_t_j[0] - t_m > w_mj + epsilon_m_j and in_t_j[0] - w_mj + epsilon_m_j > out_t_mi:
                 in_t_mj = path.arc_2_time_windows[arc][1] = out_t_mi
                 out_t_mj = path.arc_2_time_windows[arc][2] = in_t_mj + w_mj
-                # arc_p[arc] = 0
+                # arc_p[arc] = 0 
             else:
                 insert_success = False
                 for i in range(max(0,arc_p[arc]), len(in_t_j) - 1):

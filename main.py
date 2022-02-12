@@ -111,54 +111,61 @@ class MainAlgorithm:
             return '初始弧无法插入', None
         #
         for arc in path.arcs[1:]:
-            arc_p[arc] = -1
+            arc_p[arc] = -2
 
-        """
-        
+        # """
+
         arc_num = len(path.arcs)
         j = 1
-        
+
         while j < arc_num:
 
             arc = path.arcs[j]
 
             # w_j = []
-            if buffer_in_t_j.has_key(arc):
+            if arc in buffer_in_t_j:
                 in_t_j = buffer_in_t_j[arc]
                 out_t_j = buffer_out_t_j[arc]
             else:
-                in_t_j = []
-                out_t_j = []
+                in_t_j, out_t_j = self.temp_get_time_vector(arc)
                 buffer_in_t_j[arc] = in_t_j
                 buffer_out_t_j[arc] = out_t_j
 
-            out_t_mi = path.arc_2_time_windows[path.arcs[j - 1]][1] + path.arc_2_time_windows[path.arcs[j - 1]][0] 
+            out_t_mi = path.arc_2_time_windows[path.arcs[j - 1]][1] + path.arc_2_time_windows[path.arcs[j - 1]][0]
             w_mj = path.arc_2_time_windows[arc][0]
-            epsilon_m_j = 0.01 * w_mj
-            if arc_p[arc] < 0 and in_t_j[0] - t_m > w_mj + epsilon_m_j and in_t_j[0] - w_mj + epsilon_m_j > out_t_mi:
+            # epsilon_m_j = 0.01 * w_mj
+            epsilon_m_j = 5
+            insert_success = False
+            if not in_t_j:
                 in_t_mj = path.arc_2_time_windows[arc][1] = out_t_mi
                 out_t_mj = path.arc_2_time_windows[arc][2] = in_t_mj + w_mj
-                # arc_p[arc] = 0 
+                arc_p[arc] = 0
             else:
-                insert_success = False
-                for i in range(max(0,arc_p[arc]), len(in_t_j) - 1):
-                    if in_t_j[i + 1] - max(out_t_j[i], out_t_mi) > w_mj + 2 * epsilon_m_j:
-                        in_t_mj = path.arc_2_time_windows[arc][1] = max(out_t_j[i] + epsilon_m_j, out_t_mi)
-                        out_t_mj = path.arc_2_time_windows[arc][2] = in_t_mj + w_mj
-                        insert_success = True
-                        arc_p[arc] = i
-                        # arc_p[arc] = i + 1
-                        break
-            if insert_success is False:
-                in_t_mj = path.arc_2_time_windows[arc][1] = max(out_t_j[-1] + epsilon_m_j, out_t_mi)
-                out_t_mj = path.arc_2_time_windows[arc][2] = in_t_mj + w_mj
-                arc_p[arc] = len(in_t_j)
+                if arc_p[arc] == -2 and in_t_j[0] - t_m > w_mj + epsilon_m_j \
+                        and in_t_j[0] - w_mj - epsilon_m_j > out_t_mi:
+                    in_t_mj = path.arc_2_time_windows[arc][1] = out_t_mi
+                    out_t_mj = path.arc_2_time_windows[arc][2] = in_t_mj + w_mj
+                    insert_success = True
+                    arc_p[arc] = -1
+                else:
+                    for i in range(max(0, arc_p[arc]), len(in_t_j) - 1):
+                        if in_t_j[i + 1] - max(out_t_j[i], out_t_mi) > w_mj + 2 * epsilon_m_j:
+                            in_t_mj = path.arc_2_time_windows[arc][1] = max(out_t_j[i] + epsilon_m_j, out_t_mi)
+                            out_t_mj = path.arc_2_time_windows[arc][2] = in_t_mj + w_mj
+                            insert_success = True
+                            arc_p[arc] = i
+                            break
+                if insert_success is False:
+                    in_t_mj = path.arc_2_time_windows[arc][1] = max(out_t_j[-1] + epsilon_m_j, out_t_mi)
+                    out_t_mj = path.arc_2_time_windows[arc][2] = in_t_mj + w_mj
+                    arc_p[arc] = len(in_t_j)
 
             old_arc = path.arcs[j - 1]
             path.arc_2_time_windows[old_arc][2] = in_t_mj
             old_in_t_j = buffer_in_t_j[old_arc]
-            if arc_p[old_arc] < len(old_in_t_j) \
-                    and path.arc_2_time_windows[old_arc][2] < old_in_t_j[arc_p[old_arc]]:
+            # print('比较', path.arc_2_time_windows[old_arc][2], '与', old_in_t_j[arc_p[old_arc] + 1])
+            if arc_p[old_arc] < len(old_in_t_j) - 1 \
+                    and path.arc_2_time_windows[old_arc][2] > old_in_t_j[arc_p[old_arc] + 1]:
                 if j == 1:
                     return False, None
                 else:
@@ -166,8 +173,8 @@ class MainAlgorithm:
                     j = j - 1
             else:
                 j = j + 1
+        # """
         """
-
         start_arc = 1
         while True:
             for j, arc in enumerate(path.arcs[start_arc:], start=start_arc):
@@ -275,6 +282,7 @@ class MainAlgorithm:
                 arc_p[arc] = len(in_t_j)
 
             start_arc = overlap_arc + 1
+        """
 
 
 if __name__ == "__main__":

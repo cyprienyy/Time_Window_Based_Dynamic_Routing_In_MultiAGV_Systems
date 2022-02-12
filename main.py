@@ -244,7 +244,14 @@ class MainAlgorithm:
 
             j = overlap_arc
             arc = path.arcs[overlap_arc]
-            in_t_j, out_t_j = self.temp_get_time_vector(arc)
+
+            if arc in buffer_in_t_j:
+                in_t_j, out_t_j = buffer_in_t_j[arc], buffer_out_t_j[arc]
+            else:
+                in_t_j, out_t_j = self.temp_get_time_vector(arc)
+                buffer_in_t_j[arc] = in_t_j
+                buffer_out_t_j[arc] = out_t_j
+
             out_t_mi = path.arc_2_time_windows[path.arcs[j - 1]][1] + path.arc_2_time_windows[path.arcs[j - 1]][0]
             w_mj = path.arc_2_time_windows[arc][0]
             # epsilon_m_j = 0.01 * w_mj

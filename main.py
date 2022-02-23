@@ -145,6 +145,7 @@ class MainAlgorithm:
             vehicle_1, path = self.shortest_path_with_time_windows(t, mission, [vehicle])
             if vehicle_1 is not None and path is not None:
                 # 把路径交给任务
+                mission.assigned_time = t
                 mission.shortest_feasible_path = path
                 # 把任务交给车辆
                 vehicle.assign_mission(mission, t)
@@ -191,6 +192,7 @@ class MainAlgorithm:
                     # 移除该任务
                     self.wait_missions.remove(mission)
                     # 把路径交给任务
+                    mission.assigned_time = t
                     mission.shortest_feasible_path = path
                     # 把任务交给车辆
                     vehicle.assign_mission(mission, t)

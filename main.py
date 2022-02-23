@@ -23,6 +23,9 @@ class Mission:
     def get_time_win_of_arc(self, arc, mission, t_m, direction):
         return self.shortest_feasible_path.get_time_win_of_arc(arc, mission, t_m, direction)
 
+    def get_finish_time(self):
+        return self.shortest_feasible_path.arc_2_time_windows[self.shortest_feasible_path.arcs[-1]][2]
+
 
 class Vehicle:
     def __init__(self, index, loc):
@@ -35,24 +38,53 @@ class Vehicle:
     def assign_mission(self, mission: Mission, t):
         if mission.mission_type == 1:
             self.status = 2
+            self.free_time_recorder.append(('real_mission_assigned', t))
         elif mission.mission_type == 1:
             self.status = 1
+            self.free_time_recorder.append(('idle_positioning_mission_assigned', t))
         else:
             raise Exception('未识别的任务类型')
         return
 
     def remove_mission(self, t):
-        self.mission = None
-        self.status = 0
+        if self.mission is not None:
+            finish_t = self.mission.get_finish_time()
+            self.update_loc()
+            self.mission = None
+            self.status = 0
+            self.free_time_recorder.append(('become_free', min(t, finish_t)))
+        return
+
+    def check_mission_status(self, t):
+        if self.mission is not None:
+            if t >= self.mission.get_finish_time():
+                self.remove_mission(t)
+        return
+
+    def update_loc(self, t):
+        self.loc = self.get_loc()
+
+    def get_loc(self, t):
+        if self.mission is None:
+            return self.loc
+        else:
+            for arc in self.mission.shortest_feasible_path.arcs:
+                if self.mission.shortest_feasible_path.arc_2_time_windows[arc][1] <= t \
+                        < self.mission.shortest_feasible_path.arc_2_time_windows[arc][2]:
+                    return arc
 
     def is_open_for_real_mission(self) -> bool:
+        # self.check_mission_status(t)
         if self.status in (0, 1):
             return True
         return False
 
-    def is_resting_on_arc(self, arc) -> bool:
-        if self.status == 0 and self.loc == arc:
-            return True
+    def resting_on_arc(self):
+        # self.check_mission_status(t)
+        if self.status == 0:
+            return self.loc
+        else:
+            return None
 
     def get_time_win_of_arc(self, arc, mission, t_m, direction):
         if self.mission is not None:
@@ -75,8 +107,8 @@ class Path:
 
     def get_time_win_of_arc(self, arc, mission, t_m, direction):
         if arc in self.arc_2_time_windows.keys():
-            time_win = self.arc_2_time_windows[arc].copy()
-            if time_win[-1] >= t_m:
+            time_win = self.arc_2_time_windows[arc][1:]
+            if time_win[-1] > t_m:
                 return time_win
         return None
 
@@ -110,8 +142,14 @@ class MainAlgorithm:
             mission.created_time = t
             mission.mission_type = 0
             # 为该任务选择路径
-            # 把路径交给任务
-            # 把任务交给车辆
+            vehicle_1, path = self.shortest_path_with_time_windows(t, mission, [vehicle])
+            if vehicle_1 is not None and path is not None:
+                # 把路径交给任务
+                mission.shortest_feasible_path = path
+                # 把任务交给车辆
+                vehicle.assign_mission(mission, t)
+            else:
+                raise Exception('No Valid Idle Positioning Path ')
         else:
             raise Exception('No Empty Parking Space')
         return
@@ -133,9 +171,51 @@ class MainAlgorithm:
         mission.d_arc = destination
         mission.created_time = t
         self.wait_missions.append(mission)
+        self.schedule_waiting_missions(t)
         return
 
-    def
+    def schedule_waiting_missions(self, t):
+        flag = True
+        # inserted_missions = list()
+        while self.wait_missions and flag:
+            flag = False
+            # 获取所有可用车辆
+            vehicles = list()
+            for v in self.vehicles:
+                if v.is_open_for_real_mission() is True:
+                    vehicles.append(v)
+            # 按照顺序尝试插入等待任务
+            for mission in self.wait_missions:
+                vehicle, path = self.shortest_path_with_time_windows(t, mission, vehicles)
+                if vehicle is not None and path is not None:
+                    # 移除该任务
+                    self.wait_missions.remove(mission)
+                    # 把路径交给任务
+                    mission.shortest_feasible_path = path
+                    # 把任务交给车辆
+                    vehicle.assign_mission(mission, t)
+                    flag = True
+                    break
+
+        # 开始处理原地不动的车辆
+        conflicted_agvs = list()
+        for v in self.vehicles:
+            arc = v.resting_on_arc()
+            if arc is not None:
+                in_t_j, out_t_j = self.get_time_vectors_of_arc(arc, None, v, t)
+                if not in_t_j:
+                    conflicted_agvs.append((in_t_j[0], v.index, v))
+        while conflicted_agvs:
+            conflicted_agvs.sort()
+            v_2_move = conflicted_agvs[0][-1]
+            self.create_idle_positioning_mission(v_2_move, v_2_move.get_loc(), t)
+            conflicted_agvs = list()
+            for v in self.vehicles:
+                arc = v.resting_on_arc()
+                if arc is not None:
+                    in_t_j, out_t_j = self.get_time_vectors_of_arc(arc, None, v, t)
+                    if not in_t_j:
+                        conflicted_agvs.append((in_t_j[0], v.index, v))
 
     def get_time_vectors_of_arc(self, arc, mission: Mission, vehicle: Vehicle, t_m):
         rev_arc = self.arc_pair_rel[arc]
@@ -149,7 +229,10 @@ class MainAlgorithm:
                 if win_2 is not None:
                     res.append(win_2)
         res.sort(key=itemgetter(0))
-        return zip(*res)
+        if res:
+            return zip(*res)
+        else:
+            return [], []
 
     @staticmethod
     def temp_get_time_vector(arc):
@@ -162,24 +245,20 @@ class MainAlgorithm:
         else:
             return [], []
 
-    def shortest_path_with_time_windows(self, t_m, mission: Mission, _vehicles: list):
+    def shortest_path_with_time_windows(self, t_m, mission: Mission, vehicles: list):
         # choose_available_vehicles()
-        if _vehicles is None:
-            vehicles = self.vehicles
-        else:
-            vehicles = _vehicles
         best_v = None
         best_path = None
         earliest_finish_time = float('inf')
         for v in vehicles:
             for p in get_offline_paths():
                 flag, path = self.validate_path(mission, p, v, t_m)
-            if flag is True:
-                p_f_time = path.get_finish_time()
-                if p_f_time < earliest_finish_time:
-                    best_v = v
-                    best_path = path
-                    earliest_finish_time = p_f_time
+                if flag is True:
+                    p_f_time = path.get_finish_time()
+                    if p_f_time < earliest_finish_time:
+                        best_v = v
+                        best_path = path
+                        earliest_finish_time = p_f_time
         return best_v, best_path
 
     def reschedule_low_priority_missions(self):
